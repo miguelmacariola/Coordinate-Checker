@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coordinate Checker</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap">
+<style>
+  /* --- Base & Full-Screen Layout --- */
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevent body scroll */
+    font-family: 'Roboto', sans-serif;
+    background: #eef1f6;
+    font-size: 16px;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: #1976d2;
+    color: white;
+    padding: 16px;
+    font-size: 24px;
+    text-align: center;
+    font-weight: 500;
+    flex-shrink: 0; /* Prevent header from shrinking */
+    position: relative; /* Anchor for help button */
+  }
+
+  /* --- Main Content Layout (Map + Sidebar) --- */
+  .container {
+    display: flex;
+    gap: 16px;
+    padding: 16px;
+    flex: 1; /* Take all remaining vertical space */
+    min-height: 0; /* Fix flexbox overflow issue */
+  }
+  .map-container {
+    flex: 1; /* Take remaining horizontal space */
+    min-width: 300px;
+    border-radius: 6px;
+    overflow: hidden; /* Enforce rounded corners on map */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  }
+  #map {
+    height: 100%; /* Fill the map-container */
+    width: 100%;
+    background: #ddd; /* Placeholder color while tiles load */
+  }
+  .sidebar {
+    width: 340px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 300px;
+    flex-shrink: 0; /* Prevent sidebar from shrinking */
+    overflow-y: auto; /* Allow sidebar to scroll if needed */
+  }
+
+  /* --- Components --- */
+  .card {
+    background: white;
+    padding: 16px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  }
+  button {
+    padding: 10px 18px;
+    background: #1976d2;
+    border: 0;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    width: 100%;
+    transition: background-color 0.2s;
+  }
+  button:hover {
+    background: #125ea8;
+  }
+  button:disabled {
+    background: #aaa;
+    cursor: not-allowed;
+  }
+  .copy-btn {
+    margin-left: 8px;
+    background: #4CAF50;
+    width: auto; /* Override full width */
+    flex-shrink: 0; /* Don't shrink */
+  }
+  .copy-btn:hover {
+    background: #3a8b39;
+  }
+
+  /* --- Form Elements --- */
+  .form-group {
+    margin-bottom: 12px;
+  }
+  .form-group:last-child {
+    margin-bottom: 0;
+  }
+  .form-group label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 6px;
+    font-size: 16px;
+  }
+  input[type=text],
+  select {
+    padding: 8px 10px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    font-size: 16px;
+    width: 100%;
+    box-sizing: border-box; /* Important */
+  }
+  .output-group {
+    display: flex;
+    align-items: center;
+  }
+  .output-group input {
+    flex-grow: 1; /* Input takes available space */
+  }
+
+  /* --- Footer --- */
+  footer {
+    text-align: center;
+    padding: 8px;
+    font-size: 12px; /* ~8-9pt */
+    color: #777;
+    background: #eef1f6;
+    flex-shrink: 0; /* Prevent footer from shrinking */
+  }
+
+  /* --- Help Button (Header) --- */
+  #help-button {
+    position: absolute;
+    top: 50%;
+    right: 20px;
+    transform: translateY(-50%);
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0 10px;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+  }
+  #help-button:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+  }
+  
+  /* --- Help Modal --- */
+  #modal-overlay {
+    display: none; /* Hidden by default */
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+  }
+  #help-modal {
+    position: fixed;
+    z-index: 1001;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background-color: white;
+    padding: 24px;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    width: 400px;
+  }
+  .modal-close {
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    line-height: 1;
+    cursor: pointer;
+    color: #aaa;
+  }
+  .modal-close:hover {
+    color: #000;
+  }
+  .modal-content p {
+    margin-top: 0;
+    line-height: 1.6;
+  }
+
+  /* --- Custom Leaflet Controls --- */
+  .leaflet-control-custom-button {
+    background: white;
+    width: 30px;
+    height: 30px;
+    border-radius: 4px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2em;
+    font-weight: bold;
+  }
+  .leaflet-control-custom-button:hover {
+    background: #f4f4f4;
+  }
+  /* Spacing for custom controls */
+  .leaflet-control-center-original {
+    margin-top: 10px;
+  }
+  .leaflet-control-reset {
+    margin-top: 10px;
+  }
+
+
+  /* --- Custom Pin Icons --- */
+  .leaflet-div-icon {
+    background: none;
+    border: none;
+  }
+  .custom-pin-marker {
+    position: relative;
+    width: 28px;  /* Size of the circle */
+    height: 38px; /* Total height: circle + tail */
+  }
+  .custom-pin-marker .pin-circle {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 4px solid white; /* The requested white border */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.4); /* Drop shadow for depth */
+    box-sizing: border-box; /* Include border in size */
+  }
+  .custom-pin-marker .pin-tail {
+    width: 0;
+    height: 0;
+    border-left: 7px solid transparent; /* Half of 14px */
+    border-right: 7px solid transparent; /* Half of 14px */
+    position: absolute;
+    bottom: 0; /* Sits at the very bottom */
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  
+  /* Blue Pin */
+  .blue-pin .pin-circle { background-color: #1976d2; }
+  .blue-pin .pin-tail { border-top: 10px solid #1976d2; }
+
+  /* Red Pin */
+  .red-pin .pin-circle { background-color: #d32f2f; }
+  .red-pin .pin-tail { border-top: 10px solid #d32f2f; }
+
+</style>
+</head>
+<body>
+
+<header>
+  Coordinate Checker
+  <div id="help-button">?</div>
+</header>
+
+<div class="container">
+  
+  <div class="map-container">
+    <div id="map"></div>
+  </div>
+  
+  <div class="sidebar">
+    <div class="card">
+      <div class="form-group">
+        <label for="combined">Original Coordinates (Lat, Lng)</label>
+        <input type="text" id="combined" placeholder="14.5995, 120.9842">
+      </div>
+      <button id="displayBtn">Display Pin</button>
+    </div>
+
+    <div class="card">
+      <div class="form-group">
+        <label for="mapType">Map Type</label>
+        <select id="mapType">
+          <option value="satellite" selected>Satellite</option>
+          <option value="osm">OpenStreetMap</option>
+          <option value="terrain">Terrain</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="form-group">
+        <label for="outGoogle"><strong>Final Coordinates (Lat, Lng)</strong></label>
+        <div class="output-group">
+          <input type="text" id="outGoogle" readonly>
+          <button class="copy-btn" id="copyBtn">Copy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+</div>
+
+<footer>
+   November 07, 2025.
+</footer>
+
+<div id="modal-overlay">
+  <div id="help-modal">
+    <span class="modal-close" id="modal-close-btn">&times;</span>
+    <div class="modal-content">
+      <p><h3>How to Use this Coordinate Checker</h3></p>
+      <p>
+      <b>Original Coordinates</b></br>
+      These are the coordinates initially provided and will be used for verification. They are indicated on the map with a <u>BLUE PIN</u>.</br>
+      </br>
+      <b>Map Type</b></br>
+     You can switch the map view between Satellite, OpenStreetMap, and Terrain.</br>
+      </br>
+      <b>Final Coordinates</b></br>
+      If the original coordinates are inaccurate <i>(for example, placed in the wrong area, in the ocean, or located in another country</i>, drag the <u>RED PIN</u> to the correct position on the map.</br>
+      You can copy the updated coordinates by clicking the<b>"Copy"</b> button.</br>
+      </br>
+      </p>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+
+    // --- 1. DOM Element References ---
+    const mapContainer = document.getElementById('map');
+    const combinedInput = document.getElementById('combined');
+    const displayBtn = document.getElementById('displayBtn');
+    const mapTypeSelect = document.getElementById('mapType');
+    const outputInput = document.getElementById('outGoogle');
+    const copyBtn = document.getElementById('copyBtn');
+    
+    const helpButton = document.getElementById('help-button');
+    const modalOverlay = document.getElementById('modal-overlay');
+    const modalCloseBtn = document.getElementById('modal-close-btn');
+    
+    const defaultCenter = [12.8797, 121.7740];
+    const defaultZoom = 6;
+
+    // --- 2. Leaflet Map Initialization ---
+    const map = L.map(mapContainer, {
+        zoomControl: false // We will add it back in a new position
+    }).setView(defaultCenter, defaultZoom);
+
+    L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+    const layers = {
+      satellite: L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19,
+        attribution: 'Esri, DigitalGlobe, GeoEye, Earthstar Geographics'
+      }),
+      osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }),
+      terrain: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        maxZoom: 17,
+        attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
+      })
+    };
+    
+    let currentLayer = layers.satellite;
+    currentLayer.addTo(map);
+    
+    // --- 2a. Define Custom Icons ---
+    const blueIcon = L.divIcon({
+      className: 'custom-pin-marker blue-pin',
+      html: '<div class="pin-circle"></div><div class="pin-tail"></div>',
+      iconSize: [28, 38],
+      iconAnchor: [14, 38]
+    });
+
+    const redIcon = L.divIcon({
+      className: 'custom-pin-marker red-pin',
+      html: '<div class="pin-circle"></div><div class="pin-tail"></div>',
+      iconSize: [28, 38],
+      iconAnchor: [14, 38]
+    });
+
+    // --- 2b. Add Custom "Reset View" Control ---
+    L.Control.ResetView = L.Control.extend({
+        options: { position: 'bottomleft' },
+        onAdd: function (map) {
+            const container = L.DomUtil.create('div', 'leaflet-control-reset leaflet-control-custom-button');
+            container.innerHTML = '&#x1F3E0;'; // Home icon
+            container.title = "Reset View";
+            L.DomEvent.disableClickPropagation(container);
+            L.DomEvent.on(container, 'click', () => map.setView(defaultCenter, defaultZoom));
+            return container;
+        }
+    });
+
+    // --- 2c. NEW: Add "Center on Original Pin" Control ---
+    L.Control.CenterOriginal = L.Control.extend({
+        options: { position: 'bottomleft' },
+        onAdd: function (map) {
+            const container = L.DomUtil.create('div', 'leaflet-control-center-original leaflet-control-custom-button');
+            container.innerHTML = '&#x25CE;'; // Bullseye icon
+            container.title = "Center on Original Pin";
+            L.DomEvent.disableClickPropagation(container);
+            L.DomEvent.on(container, 'click', () => {
+                if (originalPin) {
+                    // Use setView to pan without changing zoom
+                    map.setView(originalPin.getLatLng(), map.getZoom());
+                } else {
+                    alert("Please place an original pin first.");
+                }
+            });
+            return container;
+        }
+    });
+
+    // Add controls to map (order matters for stacking)
+    new L.Control.CenterOriginal().addTo(map); // Add Center button
+    new L.Control.ResetView().addTo(map);    // Add Reset button below Center
+
+    // --- 3. State Variables for Pins & Line ---
+    let originalPin = null; // The static blue pin
+    let movedPin = null;    // The draggable red pin
+    let connectingLine = null; // The dashed line
+
+    // --- 4. Core Functions ---
+
+    function switchLayer() {
+      const type = mapTypeSelect.value;
+      if (layers[type] && currentLayer !== layers[type]) {
+        map.removeLayer(currentLayer);
+        currentLayer = layers[type];
+        map.addLayer(currentLayer);
+      }
+    }
+
+    function parseCombined(input) {
+      if (!input) return null;
+      const parts = input.trim().split(/[\s,;]+/);
+      if (parts.length !== 2) return null;
+      const lat = parseFloat(parts[0]);
+      const lon = parseFloat(parts[1]);
+      if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+      return { lat, lon };
+    }
+
+    function processInput() {
+      const coord = parseCombined(combinedInput.value);
+      if (!coord) {
+        alert("Invalid or out-of-range coordinates. Please enter as 'lat, lon'.");
+        return;
+      }
+      placePins(L.latLng(coord.lat, coord.lon));
+    }
+
+    /**
+     * Creates or moves the set of pins (original, moved, and line)
+     * This function is the "master" pin function, called by processInput.
+     * @param {L.LatLng} latLng - A Leaflet LatLng object
+     */
+    function placePins(latLng) {
+      // 1. Reset (remove old pins/line if they exist)
+      if (originalPin) map.removeLayer(originalPin);
+      if (movedPin) map.removeLayer(movedPin);
+      if (connectingLine) map.removeLayer(connectingLine);
+
+      // 2. Create Pins
+      // Moved (red) pin IS draggable
+      movedPin = L.marker(latLng, { 
+        draggable: true, 
+        icon: redIcon,
+        zIndexOffset: 500 // Lower Z-index
+      }).addTo(map);
+      
+      // Original (blue) pin is NOT draggable and NOT interactive
+      originalPin = L.marker(latLng, { 
+        draggable: false,
+        icon: blueIcon,
+        zIndexOffset: 1000, // Higher Z-index (on top)
+        interactive: false // *** THIS IS THE FIX ***
+      }).addTo(map);
+          
+      // 3. Create connecting line
+      connectingLine = L.polyline([latLng, latLng], {
+        dashArray: '10, 10',
+        color: 'yellow',
+        weight: 5
+      }).addTo(map);
+
+      // 4. Update UI Fields
+      const coordString = `${latLng.lat.toFixed(6)}, ${latLng.lng.toFixed(6)}`;
+      outputInput.value = coordString;
+      
+      // 5. Add Listeners
+      movedPin.on('drag', onMovedPinDrag);
+
+      // 6. Set map view
+      if (map.getZoom() < 15) {
+         map.setView(latLng, 17);
+      } else {
+         map.panTo(latLng);
+      }
+    }
+
+
+    // --- 5. Event Handlers ---
+
+    /**
+     * Called whenever the RED pin is dragged
+     */
+    function onMovedPinDrag(e) {
+      const movedLatLng = e.target.getLatLng();
+      const originalLatLng = originalPin.getLatLng();
+      
+      connectingLine.setLatLngs([originalLatLng, movedLatLng]);
+      outputInput.value = `${movedLatLng.lat.toFixed(6)}, ${movedLatLng.lng.toFixed(6)}`;
+    }
+
+    /**
+     * Called when the map is clicked.
+     * This will now ONLY move the RED pin.
+     */
+    function onMapClick(e) {
+      if (!originalPin || !movedPin) {
+        return;
+      }
+      const clickedLatLng = e.latlng;
+      const originalLatLng = originalPin.getLatLng();
+      movedPin.setLatLng(clickedLatLng);
+      connectingLine.setLatLngs([originalLatLng, clickedLatLng]);
+      outputInput.value = `${clickedLatLng.lat.toFixed(6)}, ${clickedLatLng.lng.toFixed(6)}`;
+    }
+
+    function copyCoords() {
+      if (!outputInput.value) return;
+      navigator.clipboard.writeText(outputInput.value).then(() => {
+        const originalText = copyBtn.textContent;
+        copyBtn.textContent = 'Copied!';
+        copyBtn.disabled = true;
+        setTimeout(() => {
+          copyBtn.textContent = originalText;
+          copyBtn.disabled = false;
+        }, 2000);
+      }).catch(err => {
+        console.error('Failed to copy text: ', err);
+        alert('Failed to copy coordinates.');
+      });
+    }
+
+    // Help Modal open/close
+    function showModal() {
+      modalOverlay.style.display = 'block';
+    }
+    function closeModal() {
+      modalOverlay.style.display = 'none';
+    }
+
+    // --- 6. Attach Event Listeners ---
+    displayBtn.addEventListener('click', processInput);
+    mapTypeSelect.addEventListener('change', switchLayer);
+    copyBtn.addEventListener('click', copyCoords);
+    map.on('click', onMapClick);
+
+    // Modal listeners
+    helpButton.addEventListener('click', showModal);
+    modalCloseBtn.addEventListener('click', closeModal);
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) {
+        closeModal();
+      }
+    });
+
+  });
+</script>
+</body>
+</html>
