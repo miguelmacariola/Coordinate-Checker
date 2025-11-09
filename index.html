@@ -12,7 +12,7 @@
     height: 100%;
     margin: 0;
     padding: 0;
-    overflow: hidden; /* Prevent body scroll */
+    overflow: hidden; /* Prevent body scroll ON DESKTOP */
     font-family: 'Roboto', sans-serif;
     background: #eef1f6;
     font-size: 16px;
@@ -257,6 +257,59 @@
   .red-pin .pin-circle { background-color: #d32f2f; }
   .red-pin .pin-tail { border-top: 10px solid #d32f2f; }
 
+
+  /* --- START: Mobile-Friendly Media Query --- */
+
+  @media (max-width: 768px) {
+    /* 1. Allow the body to scroll */
+    html, body {
+      height: auto;
+      overflow: auto;
+    }
+    
+    /* 2. Stack main container items vertically */
+    .container {
+      flex-direction: column;
+      height: auto;
+      min-height: auto;
+      flex: auto;
+      padding: 10px; /* Tighter padding on mobile */
+    }
+    
+    /* 3. Re-order: Sidebar (controls) on top */
+    .sidebar {
+      order: 1; /* Show sidebar first */
+      width: 100%; /* Make it full-width */
+      min-width: 0;
+      flex-shrink: 1;
+      overflow-y: visible; /* Disable internal scroll */
+    }
+    
+    /* 4. Map container below sidebar */
+    .map-container {
+      order: 2; /* Show map second */
+      width: 100%;
+      min-width: 0;
+      flex: none; /* Don't grow/shrink */
+      height: 50vh; /* Give map 50% of the screen height */
+    }
+    
+    /* 5. Adjust header and modal */
+    header {
+      font-size: 20px;
+      padding: 12px;
+    }
+    #help-button {
+      right: 10px;
+      font-size: 20px;
+    }
+    #help-modal {
+      width: 90%; /* Make modal fit screen */
+      box-sizing: border-box;
+    }
+  }
+  /* --- END: Mobile-Friendly Media Query --- */
+
 </style>
 </head>
 <body>
@@ -306,7 +359,7 @@
 </div>
 
 <footer>
-   November 07, 2025.
+  MKCM. 20251110.
 </footer>
 
 <div id="modal-overlay">
@@ -485,7 +538,7 @@
         draggable: false,
         icon: blueIcon,
         zIndexOffset: 1000, // Higher Z-index (on top)
-        interactive: false // *** THIS IS THE FIX ***
+        interactive: false // Click/drag events "pass through"
       }).addTo(map);
           
       // 3. Create connecting line
