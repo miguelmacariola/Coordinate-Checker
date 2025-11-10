@@ -12,7 +12,7 @@
     height: 100%;
     margin: 0;
     padding: 0;
-    overflow: hidden; /* Prevent body scroll ON DESKTOP */
+    overflow: hidden; /* Prevent body scroll */
     font-family: 'Roboto', sans-serif;
     background: #eef1f6;
     font-size: 16px;
@@ -218,6 +218,28 @@
   .leaflet-control-reset {
     margin-top: 10px;
   }
+  /* Style for "Get Current Location" button */
+  .leaflet-control-current-location button {
+    background: white;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    white-space: nowrap; /* Prevent text wrapping */
+    transition: background-color 0.2s;
+  }
+  .leaflet-control-current-location button:hover {
+    background: #f4f4f4;
+  }
+  .leaflet-control-current-location button:disabled {
+    background: #eee;
+    color: #888;
+    cursor: default;
+  }
 
 
   /* --- Custom Pin Icons --- */
@@ -257,9 +279,33 @@
   .red-pin .pin-circle { background-color: #d32f2f; }
   .red-pin .pin-tail { border-top: 10px solid #d32f2f; }
 
+  /* --- Button Group Styles --- */
+  .button-group {
+    display: flex;
+    gap: 8px; /* Space between buttons */
+  }
+  /* Override default 100% width for buttons inside this group */
+  .button-group button {
+    width: auto;
+    flex-shrink: 0;
+  }
+  .button-group .display-btn {
+    flex-grow: 1; /* This takes up all available space (~80%) */
+  }
+  .button-group .reset-btn {
+    flex-grow: 0;
+    flex-basis: 50px; /* This is our ~20% (or fixed 50px width) */
+    background: #ef5350; /* Lighter red */
+    padding: 10px;
+    font-size: 1.2em;
+    line-height: 1.2;
+  }
+  .button-group .reset-btn:hover {
+    background: #e53935; /* Darker shade of the light red */
+  }
 
-  /* --- START: Mobile-Friendly Media Query --- */
 
+  /* --- Mobile-Friendly Media Query --- */
   @media (max-width: 768px) {
     /* 1. Allow the body to scroll */
     html, body {
@@ -308,7 +354,6 @@
       box-sizing: border-box;
     }
   }
-  /* --- END: Mobile-Friendly Media Query --- */
 
 </style>
 </head>
@@ -331,7 +376,10 @@
         <label for="combined">Original Coordinates (Lat, Lng)</label>
         <input type="text" id="combined" placeholder="14.5995, 120.9842">
       </div>
-      <button id="displayBtn">Display Pin</button>
+      <div class="button-group">
+        <button id="displayBtn" class="display-btn">Display Pin</button>
+        <button id="resetBtn" class="reset-btn" title="Clear Coordinates">&#x21BA;</button>
+      </div>
     </div>
 
     <div class="card">
@@ -391,6 +439,7 @@
     const mapContainer = document.getElementById('map');
     const combinedInput = document.getElementById('combined');
     const displayBtn = document.getElementById('displayBtn');
+    const resetBtn = document.getElementById('resetBtn'); 
     const mapTypeSelect = document.getElementById('mapType');
     const outputInput = document.getElementById('outGoogle');
     const copyBtn = document.getElementById('copyBtn');
@@ -455,7 +504,7 @@
         }
     });
 
-    // --- 2c. NEW: Add "Center on Original Pin" Control ---
+    // --- 2c. Add "Center on Original Pin" Control ---
     L.Control.CenterOriginal = L.Control.extend({
         options: { position: 'bottomleft' },
         onAdd: function (map) {
@@ -465,7 +514,6 @@
             L.DomEvent.disableClickPropagation(container);
             L.DomEvent.on(container, 'click', () => {
                 if (originalPin) {
-                    // Use setView to pan without changing zoom
                     map.setView(originalPin.getLatLng(), map.getZoom());
                 } else {
                     alert("Please place an original pin first.");
@@ -475,9 +523,69 @@
         }
     });
 
-    // Add controls to map (order matters for stacking)
-    new L.Control.CenterOriginal().addTo(map); // Add Center button
-    new L.Control.ResetView().addTo(map);    // Add Reset button below Center
+    // --- 2d. "Get Current Location" Control ---
+    L.Control.CurrentLocation = L.Control.extend({
+        options: { position: 'topright' }, 
+        onAdd: function (map) {
+            const container = L.DomUtil.create('div', 'leaflet-control-current-location');
+            const button = L.DomUtil.create('button', '', container);
+            button.innerHTML = 'Get current location'; // <-- UPDATED (No icon)
+            button.title = "Get Current Location";
+
+            L.DomEvent.disableClickPropagation(container);
+            L.DomEvent.on(button, 'click', () => {
+                if (navigator.geolocation) {
+                    button.textContent = 'Locating...'; // <-- UPDATED
+                    button.disabled = true;
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const lat = position.coords.latitude;
+                            const lng = position.coords.longitude;
+                            combinedInput.value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                            processInput(); // Display the pin
+                            
+                            // --- NEW Success Feedback ---
+                            button.textContent = 'Location found!';
+                            setTimeout(() => {
+                                button.textContent = 'Get current location';
+                                button.disabled = false;
+                            }, 2000); // Reset after 2 seconds
+                        },
+                        (error) => {
+                            let errorMessage;
+                            switch(error.code) {
+                                case error.PERMISSION_DENIED:
+                                    errorMessage = "Location access denied. Please allow it in your browser settings.";
+                                    break;
+                                case error.POSITION_UNAVAILABLE:
+                                    errorMessage = "Location information is unavailable.";
+                                    break;
+                                case error.TIMEOUT:
+                                    errorMessage = "The request to get user location timed out.";
+                                    break;
+                                default:
+                                    errorMessage = "An unknown error occurred.";
+                                    break;
+                            }
+                            alert(errorMessage);
+                            console.error('Geolocation error:', error);
+                            button.textContent = 'Get current location'; // <-- UPDATED
+                            button.disabled = false;
+                        },
+                        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                    );
+                } else {
+                    alert("Geolocation is not supported by your browser.");
+                }
+            });
+            return container;
+        }
+    });
+
+    new L.Control.CenterOriginal().addTo(map); 
+    new L.Control.ResetView().addTo(map);
+    new L.Control.CurrentLocation().addTo(map);
+
 
     // --- 3. State Variables for Pins & Line ---
     let originalPin = null; // The static blue pin
@@ -514,31 +622,24 @@
       placePins(L.latLng(coord.lat, coord.lon));
     }
 
-    /**
-     * Creates or moves the set of pins (original, moved, and line)
-     * This function is the "master" pin function, called by processInput.
-     * @param {L.LatLng} latLng - A Leaflet LatLng object
-     */
     function placePins(latLng) {
-      // 1. Reset (remove old pins/line if they exist)
+      // 1. Reset
       if (originalPin) map.removeLayer(originalPin);
       if (movedPin) map.removeLayer(movedPin);
       if (connectingLine) map.removeLayer(connectingLine);
 
       // 2. Create Pins
-      // Moved (red) pin IS draggable
       movedPin = L.marker(latLng, { 
         draggable: true, 
         icon: redIcon,
-        zIndexOffset: 500 // Lower Z-index
+        zIndexOffset: 500
       }).addTo(map);
       
-      // Original (blue) pin is NOT draggable and NOT interactive
       originalPin = L.marker(latLng, { 
         draggable: false,
         icon: blueIcon,
-        zIndexOffset: 1000, // Higher Z-index (on top)
-        interactive: false // Click/drag events "pass through"
+        zIndexOffset: 1000, 
+        interactive: false
       }).addTo(map);
           
       // 3. Create connecting line
@@ -566,9 +667,6 @@
 
     // --- 5. Event Handlers ---
 
-    /**
-     * Called whenever the RED pin is dragged
-     */
     function onMovedPinDrag(e) {
       const movedLatLng = e.target.getLatLng();
       const originalLatLng = originalPin.getLatLng();
@@ -577,10 +675,6 @@
       outputInput.value = `${movedLatLng.lat.toFixed(6)}, ${movedLatLng.lng.toFixed(6)}`;
     }
 
-    /**
-     * Called when the map is clicked.
-     * This will now ONLY move the RED pin.
-     */
     function onMapClick(e) {
       if (!originalPin || !movedPin) {
         return;
@@ -618,6 +712,11 @@
 
     // --- 6. Attach Event Listeners ---
     displayBtn.addEventListener('click', processInput);
+    
+    resetBtn.addEventListener('click', () => {
+      combinedInput.value = '';
+    });
+    
     mapTypeSelect.addEventListener('change', switchLayer);
     copyBtn.addEventListener('click', copyCoords);
     map.on('click', onMapClick);
